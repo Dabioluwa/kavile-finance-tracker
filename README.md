@@ -18,7 +18,7 @@ process — statements are never uploaded to a third party.
 - **Dual-sheet awareness** — Wallet spending and Savings movement are kept separate, and
   internal wallet ↔ savings transfers are excluded from income/spend so nothing is
   double counted.
-- **OWealth interest tracker** — interest credits are isolated, totalled, annualised
+- **Interest tracker** — interest credits are isolated, totalled, annualised
   against the average savings balance, and charted as cumulative passive returns.
 - **Rule-based categorisation** — 18 categories and 19 priority-ordered regex rules.
   Rules are editable in the UI, and interest detection still works even if you rewrite
