@@ -1,7 +1,7 @@
 # Kavile finance tracking
 
 An interactive personal-finance dashboard for Nigerian bank and wallet statements.
-Drop in a messy OPay / PalmPay / Kuda / bank export and Kavile cleans it, tags every
+Drop in a messy OPay / PalmPay / Kuda / traditional bank export and Kavile cleans it, tags every
 transaction, scores your financial health, and turns a year of activity into charts you
 can actually act on.
 
