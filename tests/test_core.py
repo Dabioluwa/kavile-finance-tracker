@@ -129,6 +129,41 @@ def test_analysis_and_scoring(demo_statement):
     assert "of all spending" not in betting["body"]
 
 
+def test_transfers_in_income_toggle(demo_statement):
+    categorized, _ = apply_categorization(demo_statement.transactions)
+    strict = build_analysis(categorized)
+    inclusive = build_analysis(categorized, include_transfers_in_income=True)
+
+    assert strict.kpis["transfers_in"] > 0
+    assert strict.kpis["income_includes_transfers"] is False
+    assert strict.kpis["income_base"] == pytest.approx(strict.kpis["core_income"])
+    assert inclusive.kpis["income_base"] == pytest.approx(
+        inclusive.kpis["core_income"] + inclusive.kpis["transfers_in"]
+    )
+    assert inclusive.kpis["income_base"] > strict.kpis["income_base"]
+    assert inclusive.kpis["betting_share"] < strict.kpis["betting_share"]
+
+    breakdown = strict.income_breakdown
+    expected = {
+        "timestamp",
+        "account",
+        "description",
+        "category",
+        "credit",
+        "included",
+        "reason",
+    }
+    assert expected <= set(breakdown.columns)
+    counted = breakdown.loc[breakdown["included"]]
+    assert counted["credit"].sum() == pytest.approx(strict.kpis["income_base"])
+    assert counted["category"].ne("Transfers In").all()
+
+    inclusive_transfers = inclusive.income_breakdown.loc[
+        inclusive.income_breakdown["category"].eq("Transfers In"), "included"
+    ]
+    assert inclusive_transfers.all()
+
+
 def test_rules_roundtrip_and_custom_rule(demo_statement):
     rules = default_rules()
     frame = rules_to_frame(rules)

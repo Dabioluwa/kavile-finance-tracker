@@ -20,6 +20,10 @@ process — statements are never uploaded to a third party.
   double counted.
 - **Interest tracker** — interest credits are isolated, totalled, annualised
   against the average savings balance, and charted as cumulative passive returns.
+- **Editable income definition** — by default income is Salary & Income, OWealth
+  Interest and Other Income. Transfers In are excluded as cash movement, but a toggle
+  in **Data & rules** includes them when they are genuinely earnings. An income-base
+  breakdown shows every credit that was counted and why.
 - **Rule-based categorisation** — 18 categories and 19 priority-ordered regex rules.
   Rules are editable in the UI, and interest detection still works even if you rewrite
   the rules.
@@ -90,7 +94,7 @@ If a file cannot be read at all, the app shows a parse error instead of crashing
 | Signal | Weight | What it looks at |
 | --- | ---: | --- |
 | Spending control | 22% | Share of income spent, and discretionary leakage |
-| Savings rate | 20% | Deposits into savings ÷ core income (target 20%) |
+| Savings rate | 20% | Deposits into savings ÷ income base (target 20%) |
 | Cash-flow stability | 15% | How many months ended in the green |
 | Saving consistency | 13% | How many months you actually moved money to savings |
 | Emergency buffer | 12% | Savings balance ÷ average monthly expenses |
@@ -99,6 +103,11 @@ If a file cannot be read at all, the app shows a parse error instead of crashing
 
 The weighted total maps to a grade (A–E), a headline, and advice for the lowest-scoring
 signals. It is a coaching heuristic, not a credit score or financial advice.
+
+The **income base** starts with Salary & Income + OWealth Interest + Other Income. It can
+optionally include Transfers In. Savings & Investments are internal wallet ↔ savings
+movements, so they are excluded from both income and spending; interest credited on those
+savings is new earnings, which is why it stays in income.
 
 ## Project structure
 

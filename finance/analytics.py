@@ -44,6 +44,7 @@ class Analysis:
     weekly: pd.DataFrame
     spend_by_category: pd.DataFrame
     income_by_category: pd.DataFrame
+    income_breakdown: pd.DataFrame
     top_merchants: pd.DataFrame
     frequency: pd.DataFrame
     heatmap: pd.DataFrame | None
@@ -59,8 +60,15 @@ class Analysis:
     warnings: list[str] = field(default_factory=list)
 
 
-def build_analysis(transactions: pd.DataFrame) -> Analysis:
-    """Compute every table and KPI the dashboard needs."""
+def build_analysis(
+    transactions: pd.DataFrame, include_transfers_in_income: bool = False
+) -> Analysis:
+    """Compute every table and KPI the dashboard needs.
+
+    ``include_transfers_in_income`` controls whether credits categorised as
+    ``Transfers In`` are treated as income. It is off by default because a
+    transfer is cash movement, not necessarily money earned.
+    """
     if transactions is None or transactions.empty:
         raise ValueError("No transactions to analyse.")
 
@@ -80,12 +88,18 @@ def build_analysis(transactions: pd.DataFrame) -> Analysis:
     outflow = float(cash.loc[cash["debit"] > 0, "debit"].sum())
     net = inflow - outflow
 
-    core_income = float(
-        cash.loc[
-            cash["category"].isin(INCOME_CATEGORIES - {"Transfers In"}), "credit"
-        ].sum()
+    core_categories = INCOME_CATEGORIES - {"Transfers In"}
+    core_income = float(cash.loc[cash["category"].isin(core_categories), "credit"].sum())
+    transfers_in = float(
+        cash.loc[cash["category"].eq("Transfers In"), "credit"].sum()
     )
-    income_base = core_income if core_income > 0 else inflow
+    included_income = core_income + (
+        transfers_in if include_transfers_in_income else 0.0
+    )
+    # If no earned income is detected, fall back to every non-internal credit so
+    # the ratios still have a denominator.
+    income_base = included_income if included_income > 0 else inflow
+    income_breakdown = _income_breakdown(tx, include_transfers_in_income)
 
     savings_accounts = [
         str(a)
@@ -211,7 +225,10 @@ def build_analysis(transactions: pd.DataFrame) -> Analysis:
         "outflow": outflow,
         "net": net,
         "core_income": core_income,
+        "transfers_in": transfers_in,
         "income_base": income_base,
+        "income_includes_transfers": include_transfers_in_income,
+        "income_fallback": included_income <= 0,
         "savings_deposits": deposits,
         "savings_withdrawals": withdrawals,
         "savings_net": deposits - withdrawals + interest_total,
@@ -267,6 +284,7 @@ def build_analysis(transactions: pd.DataFrame) -> Analysis:
         weekly=weekly,
         spend_by_category=spend_by_category,
         income_by_category=income_by_category,
+        income_breakdown=income_breakdown,
         top_merchants=top_merchants,
         frequency=frequency,
         heatmap=heatmap,
@@ -449,6 +467,57 @@ def _interest_monthly(
     result["label"] = pd.to_datetime(result["month"] + "-01").dt.strftime("%b %y")
     result["cumulative"] = result["interest"].cumsum()
     return result
+
+
+def _income_breakdown(
+    tx: pd.DataFrame, include_transfers_in_income: bool
+) -> pd.DataFrame:
+    """Every credit, flagged with whether it feeds the income denominator."""
+    columns = [
+        "timestamp",
+        "account",
+        "description",
+        "category",
+        "credit",
+        "included",
+        "reason",
+    ]
+    if tx.empty or "credit" not in tx:
+        return pd.DataFrame(columns=columns)
+
+    credits = tx.loc[tx["credit"] > 0].copy()
+    if credits.empty:
+        return pd.DataFrame(columns=columns)
+
+    included_categories = INCOME_CATEGORIES - (
+        set() if include_transfers_in_income else {"Transfers In"}
+    )
+    credits["included"] = (~credits["is_internal"]) & credits["category"].isin(
+        included_categories
+    )
+
+    def _reason(row: pd.Series) -> str:
+        category = str(row["category"])
+        if row["is_internal"]:
+            return "Excluded — internal movement between your own accounts"
+        if row["included"]:
+            if category == INTEREST_CATEGORY:
+                return "Counted — interest is new earnings on savings"
+            if category == "Salary & Income":
+                return "Counted — earned income"
+            if category == "Transfers In":
+                return "Counted — Transfers In included by your setting"
+            return "Counted — refund or unmatched credit"
+        if category == "Transfers In":
+            return "Excluded — Transfers In is cash movement, not earned income"
+        return f"Excluded — {category} is not treated as income"
+
+    credits["reason"] = credits.apply(_reason, axis=1)
+    return (
+        credits[columns]
+        .sort_values(["included", "timestamp"], ascending=[False, False])
+        .reset_index(drop=True)
+    )
 
 
 def _by_category(cash: pd.DataFrame, side: str) -> pd.DataFrame:

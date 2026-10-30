@@ -381,6 +381,7 @@ def _demo_file() -> bytes:
 # ---------------------------------------------------------------------------
 
 EDITOR_KEY = "rules_editor"
+INCOME_TOGGLE_KEY = "include_transfers_in_income"
 
 
 def _init_state() -> None:
@@ -1181,6 +1182,98 @@ def render_insights(analysis: Analysis, health: HealthReport, insights: list[dic
         show_table(pd.DataFrame(rows), height=180)
 
 
+def _income_rows(frame: pd.DataFrame) -> None:
+    view = frame.copy()
+    view["Date"] = view["timestamp"].dt.strftime("%d %b %Y")
+    view["Amount"] = view["credit"].map(money)
+    view = view[
+        ["Date", "account", "description", "category", "Amount", "reason"]
+    ].rename(
+        columns={
+            "account": "Account",
+            "description": "Description",
+            "category": "Category",
+            "reason": "Why",
+        }
+    )
+    show_table(view, height=320)
+
+
+def render_income_definition(analysis: Analysis) -> None:
+    """Explain the income denominator and expose the Transfers In toggle."""
+    k = analysis.kpis
+    breakdown = analysis.income_breakdown
+    included = breakdown.loc[breakdown["included"]] if not breakdown.empty else breakdown
+    excluded = breakdown.loc[~breakdown["included"]] if not breakdown.empty else breakdown
+
+    st.markdown("### Income definition")
+    with panel(
+        "What counts as income",
+        "The denominator behind betting share, savings rate and expense ratio",
+    ):
+        st.toggle(
+            "Count Transfers In as income",
+            key=INCOME_TOGGLE_KEY,
+            help=(
+                "Off by default. Transfers In can be your own money moving between "
+                "accounts, a refund, or a repayment, so they are treated as cash "
+                "movement rather than earned income. Turn this on if your incoming "
+                "transfers are genuinely earnings."
+            ),
+        )
+        treatment = (
+            "Transfers In are currently counted as income."
+            if k["income_includes_transfers"]
+            else "Transfers In are currently excluded from income."
+        )
+        st.caption(
+            f"{treatment} Core income means Salary & Income + OWealth Interest + "
+            "Other Income. Savings & Investments are internal wallet ↔ savings "
+            "movements and are excluded entirely — but interest credited on those "
+            "savings is new earnings, so OWealth Interest stays in income."
+        )
+
+        metric1, metric2, metric3, metric4 = st.columns(4)
+        metric1.metric("Core income", money(k["core_income"]))
+        metric2.metric("Transfers In", money(k["transfers_in"]))
+        metric3.metric("Income base used", money(k["income_base"]))
+        metric4.metric("Credits counted", f"{int(len(included)):,}")
+
+        if k["income_fallback"]:
+            st.warning(
+                "No earned income was detected, so the income base falls back to "
+                "every non-internal credit (Money in)."
+            )
+
+        if not breakdown.empty:
+            summary = (
+                breakdown.groupby(["category", "included"], as_index=False)
+                .agg(Transactions=("credit", "size"), Total=("credit", "sum"))
+                .sort_values(["included", "Total"], ascending=[False, False])
+            )
+            summary["Treatment"] = summary["included"].map(
+                {True: "Counted", False: "Excluded"}
+            )
+            summary["Total"] = summary["Total"].map(money)
+            show_table(
+                summary[["category", "Treatment", "Total", "Transactions"]].rename(
+                    columns={"category": "Category"}
+                )
+            )
+
+        with st.expander(f"Included transactions ({len(included):,})", expanded=True):
+            if included.empty:
+                st.caption("No credits feed the income base in this view.")
+            else:
+                _income_rows(included)
+
+        with st.expander(f"Excluded credits ({len(excluded):,})", expanded=False):
+            if excluded.empty:
+                st.caption("Every credit in this view is counted as income.")
+            else:
+                _income_rows(excluded)
+
+
 def render_data(
     dataset: StatementData,
     analysis: Analysis,
@@ -1216,6 +1309,9 @@ def render_data(
                 st.markdown(f"- {warning}")
     else:
         st.caption("No parsing issues. Everything mapped cleanly.")
+
+    st.write("")
+    render_income_definition(analysis)
 
     st.write("")
     st.markdown("### Categorisation rules")
@@ -1494,7 +1590,12 @@ def main() -> None:
         return
 
     try:
-        analysis = build_analysis(filtered)
+        analysis = build_analysis(
+            filtered,
+            include_transfers_in_income=bool(
+                st.session_state.get(INCOME_TOGGLE_KEY, False)
+            ),
+        )
         health = compute_health(analysis.kpis)
         insights = build_insights(analysis.kpis, health, analysis)
     except Exception as exc:  # pragma: no cover - defensive
