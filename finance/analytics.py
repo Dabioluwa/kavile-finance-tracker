@@ -641,6 +641,9 @@ def build_insights(kpis: dict[str, Any], health: Any, analysis: Analysis) -> lis
 
     if kpis["betting_total"] > 0:
         share = float(kpis["betting_share"])
+        outflow_share = (
+            kpis["betting_total"] / kpis["spend_total"] if kpis["spend_total"] else 0.0
+        )
         insights.append(
             {
                 "tone": "warn" if share >= 0.05 else "info",
@@ -648,7 +651,8 @@ def build_insights(kpis: dict[str, Any], health: Any, analysis: Analysis) -> lis
                 "title": f"Betting absorbed {pct(share)} of income",
                 "body": (
                     f"{money(kpis['betting_total'])} went to betting apps — "
-                    f"{pct(kpis['betting_total'] / kpis['spend_total'] if kpis['spend_total'] else 0)} of all spending. "
+                    f"{pct(outflow_share)} of total money out (transfers included), "
+                    f"but {pct(share)} of the income you earned. "
                     "Consider a hard monthly cap."
                 ),
             }

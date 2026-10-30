@@ -124,6 +124,9 @@ def test_analysis_and_scoring(demo_statement):
     insights = build_insights(k, health, analysis)
     assert len(insights) >= 4
     assert all({"tone", "title", "body"} <= set(item) for item in insights)
+    betting = next(item for item in insights if "Betting" in item["title"])
+    assert "total money out" in betting["body"]
+    assert "of all spending" not in betting["body"]
 
 
 def test_rules_roundtrip_and_custom_rule(demo_statement):
