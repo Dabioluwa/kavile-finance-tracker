@@ -1207,10 +1207,7 @@ def render_income_definition(analysis: Analysis) -> None:
     excluded = breakdown.loc[~breakdown["included"]] if not breakdown.empty else breakdown
 
     st.markdown("### Income definition")
-    with panel(
-        "What counts as income",
-        "The denominator behind betting share, savings rate and expense ratio",
-    ):
+    with panel("What counts as income"):
         st.toggle(
             "Count Transfers In as income",
             key=INCOME_TOGGLE_KEY,
